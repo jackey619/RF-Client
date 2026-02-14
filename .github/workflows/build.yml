@@ -1,10 +1,6 @@
-name: Build RF-Client (Windows | Any CPU)
+name: Build RF-Client (Windows | Any CPU) - Debug
 
 on:
-  push:
-    branches: [ "**" ]
-  pull_request:
-    branches: [ "master" ]
   workflow_dispatch:
 
 jobs:
@@ -27,74 +23,93 @@ jobs:
           msbuild RA2Client.sln /p:Configuration=Release /p:Platform="Any CPU" /m /t:Build /v:detailed
         shell: pwsh
 
-      - name: 📦 Collect all output files
+      - name: 🕵️ Debug - Find all built files
+        run: |
+          Write-Host "🔍 Searching for all .exe and .dll files in workspace..."
+          
+          # 搜索所有 exe 和 dll 文件
+          $allExes = Get-ChildItem -Path . -Recurse -Include *.exe
+          $allDlls = Get-ChildItem -Path . -Recurse -Include *.dll
+          
+          Write-Host "=== Found .exe files ==="
+          foreach ($exe in $allExes) {
+            Write-Host "  $($exe.FullName) (Size: $($exe.Length) bytes)"
+          }
+          
+          Write-Host "`n=== Found .dll files ==="
+          foreach ($dll in $allDlls) {
+            Write-Host "  $($dll.FullName) (Size: $($dll.Length) bytes)"
+          }
+          
+          # 检查常见的输出目录
+          Write-Host "`n=== Checking common output paths ==="
+          $commonPaths = @(
+            "RA2Client\bin\Release",
+            "RA2Client\Bin\Resources\Binaries",
+            "ClientCore\bin\Release",
+            "ClientCore\Bin\Resources\Binaries",
+            "ClientGUI\bin\Release",
+            "ClientGUI\Bin\Resources\Binaries",
+            "Bin",
+            "Bin\Resources\Binaries"
+          )
+          
+          foreach ($path in $commonPaths) {
+            if (Test-Path $path) {
+              Write-Host "✅ $path exists"
+              $items = Get-ChildItem $path -Recurse
+              foreach ($item in $items) {
+                Write-Host "  - $($item.Name) ($($item.Length) bytes)"
+              }
+            } else {
+              Write-Host "❌ $path does not exist"
+            }
+          }
+        shell: pwsh
+
+      - name: 📦 Collect all output files (Updated)
         run: |
           # 创建发布目录
-          mkdir release-package
+          mkdir release-package -Force
 
-          # RA2Client 项目的实际输出路径（根据 .csproj 配置）
-          $ra2clientOutputPath = "RA2Client\Bin\Resources\Binaries"
-          
-          if (Test-Path $ra2clientOutputPath) {
-            Write-Host "✅ Copying RA2Client files from: $ra2clientOutputPath"
-            Copy-Item "$ra2clientOutputPath\*" -Destination release-package -Recurse -Force
+          # 搜索所有构建输出文件
+          $allBuiltFiles = Get-ChildItem -Path . -Recurse | Where-Object { 
+            ($_.Extension -eq '.exe' -or $_.Extension -eq '.dll') -and 
+            $_.FullName -notlike '*obj*' -and
+            $_.FullName -notlike '*packages*'
+          }
+
+          Write-Host "📦 Found $($allBuiltFiles.Count) built executable files"
+
+          foreach ($file in $allBuiltFiles) {
+            $relativePath = Resolve-Path -Path $file.Directory -Relative
+            $relativePath = $relativePath.TrimStart('.')
             
-            # 检查是否复制了关键文件
-            $ra2clientExe = "release-package\RA2Client.exe"
-            if (Test-Path $ra2clientExe) {
-              Write-Host "✅ RA2Client.exe successfully copied!"
-            } else {
-              Write-Warning "⚠️ RA2Client.exe not found in output"
-            }
+            $destDir = Join-Path "release-package" $relativePath
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            
+            $destFile = Join-Path $destDir $file.Name
+            Copy-Item $file.FullName -Destination $destFile -Force
+            Write-Host "✅ Copied: $($file.Name) -> $destFile"
+          }
+
+          # 检查是否有 RA2Client.exe
+          $ra2clientExe = Get-ChildItem -Path . -Recurse -Filter "RA2Client.exe" -ErrorAction SilentlyContinue
+          if ($ra2clientExe) {
+            Write-Host "✅ RA2Client.exe found at: $($ra2clientExe.FullName)"
+            # 确保主程序也被复制到根目录
+            Copy-Item $ra2clientExe.FullName -Destination "release-package\RA2Client.exe" -Force
           } else {
-            Write-Warning "⚠️ RA2Client output path does not exist: $ra2clientOutputPath"
-            
-            # 尝试标准输出路径作为备选
-            $standardPath = "RA2Client\bin\Release"
-            if (Test-Path $standardPath) {
-              Write-Host "✅ Found RA2Client in standard path: $standardPath"
-              Copy-Item "$standardPath\*" -Destination release-package -Recurse -Force
-            }
+            Write-Warning "⚠️ RA2Client.exe not found anywhere in the workspace!"
           }
 
-          # 收集其他项目的输出（可能使用标准路径）
-          $projects = @(
-            "ClientCore",
-            "ClientGUI",
-            "DTAConfig",
-            "Localization",
-            "Rampastring.XNAUI",
-            "ClientUpdater",
-            "RandomMapGenerator",
-            "Reunion",
-            "Rampastring.Tools"
-          )
-
-          foreach ($proj in $projects) {
-            # 检查标准输出路径
-            $standardPath = "$proj\bin\Release"
-            if (Test-Path $standardPath) {
-              Write-Host "✅ Copying from: $proj"
-              Copy-Item "$standardPath\*" -Destination release-package -Recurse -Force
-            } else {
-              Write-Warning "⚠️ Standard output path not found for ${proj}"
-              
-              # 检查可能的其他输出路径（如果有类似的自定义配置）
-              $altPath = "$proj\Bin\Resources\Binaries"
-              if (Test-Path $altPath) {
-                Write-Host "✅ Found alternative output path for ${proj}: ${altPath}"
-                Copy-Item "$altPath\*" -Destination release-package -Recurse -Force
-              }
-            }
-          }
-
-          $fileCount = (Get-ChildItem release-package -Recurse | Measure-Object).Count
-          Write-Host "📦 Total files collected: $fileCount"
+          $fileCount = (Get-ChildItem release-package -Recurse -File | Measure-Object).Count
+          Write-Host "📦 Final count in release-package: $fileCount files"
         shell: pwsh
 
       - name: 📤 Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RF-Client-Windows-${{ github.sha }}
+          name: RF-Client-Windows-debug-${{ github.sha }}
           path: release-package/
           retention-days: 7
