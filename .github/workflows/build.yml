@@ -39,7 +39,7 @@ jobs:
       - name: Collect output files
         run: |
           mkdir release-package
-          xcopy "RA2Client\bin\x86\Release\*" "release-package\" /E /I /Y
+          xcopy "${{ github.workspace }}\RA2Client\bin\x86\Release\*" "release-package\" /E /I /Y
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
