@@ -77,12 +77,12 @@ jobs:
               Write-Host "✅ Copying from: $proj"
               Copy-Item "$standardPath\*" -Destination release-package -Recurse -Force
             } else {
-              Write-Warning "⚠️ Standard output path not found for $proj"
+              Write-Warning "⚠️ Standard output path not found for ${proj}"
               
               # 检查可能的其他输出路径（如果有类似的自定义配置）
               $altPath = "$proj\Bin\Resources\Binaries"
               if (Test-Path $altPath) {
-                Write-Host "✅ Found alternative output path for $proj: $altPath"
+                Write-Host "✅ Found alternative output path for ${proj}: ${altPath}"
                 Copy-Item "$altPath\*" -Destination release-package -Recurse -Force
               }
             }
