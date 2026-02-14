@@ -24,16 +24,60 @@ jobs:
       - name: 🏗️ Build Solution (Release | Any CPU)
         run: |
           $errorActionPreference = "Stop"
-          msbuild RA2Client.sln `
-            /p:Configuration=Release `
-            /p:Platform="Any CPU" `
-            /v:minimal `
-            /m
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "MSBuild failed!"
-            exit $LASTEXITCODE
+          # 1. 先检查解决方案文件是否存在
+          if (!(Test-Path "RA2Client.sln")) {
+            Write-Error "Solution file not found!"
+            exit 1
           }
-        shell: pwsh
+    
+          # 2. 执行构建并捕获详细输出
+          $msbuildResult = Start-Process -FilePath "msbuild" -ArgumentList @(
+            "RA2Client.sln",
+            "/p:Configuration=Release",
+            "/p:Platform=`"Any CPU`"",
+            "/v:detailed",
+            "/m"
+          ) -Wait -PassThru -NoNewWindow
+    
+          if ($msbuildResult.ExitCode -ne 0) {
+            Write-Error "MSBuild failed with exit code: $($msbuildResult.ExitCode)"
+            exit $msbuildResult.ExitCode
+          }
+    
+          # 3. 验证是否有输出文件生成
+          $buildSuccess = $false
+          $projects = @(
+            "RA2Client",
+            "ClientCore",
+            "ClientGUI",
+            "DTAConfig",
+            "Localization",
+            "Rampastring.XNAUI",
+            "ClientUpdater",
+            "RandomMapGenerator",
+            "Reunion",
+            "Rampastring.Tools"
+          )
+    
+          foreach ($proj in $projects) {
+            $outputDir = "$proj\bin\Release"
+            if (Test-Path $outputDir) {
+              $files = Get-ChildItem $outputDir -Recurse -File
+              if ($files.Count -gt 0) {
+                Write-Host "✅ $proj: Found $($files.Count) output files in $outputDir"
+                $buildSuccess = $true
+              } else {
+                Write-Warning "⚠️ $proj: Output directory exists but is empty: $outputDir"
+              }
+            } else {
+              Write-Warning "⚠️ $proj: Output directory does not exist: $outputDir"
+            }
+          }
+    
+          if (-not $buildSuccess) {
+            Write-Error "❌ No projects generated any output files! Build likely failed silently."
+            exit 1
+          }
 
       - name: 📦 Collect all output files
         run: |
@@ -61,7 +105,7 @@ jobs:
               Write-Warning "⚠️ Output not found: $srcPath"
             }
           }
-          
+
           # 验证是否收集到关键文件
           $ra2clientExe = "release-package\RA2Client.exe"
           if (!(Test-Path $ra2clientExe)) {
