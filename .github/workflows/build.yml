@@ -55,13 +55,13 @@ jobs:
           foreach ($proj in $projects) {
             $srcPath = "${{ github.workspace }}\$proj\bin\Release"
             if (Test-Path $srcPath) {
-              Write-Host "✅ Copying from $proj\bin\Release"
+              Write-Host "✅ Copying from $srcPath"
               Copy-Item "$srcPath\*" -Destination release-package -Recurse -Force
             } else {
-              Write-Warning "⚠️  Output not found: $srcPath"
+              Write-Warning "⚠️ Output not found: $srcPath"
             }
           }
-
+          
           # 验证是否收集到关键文件
           $ra2clientExe = "release-package\RA2Client.exe"
           if (!(Test-Path $ra2clientExe)) {
