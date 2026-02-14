@@ -25,7 +25,7 @@ jobs:
           $errorActionPreference = "Stop"
           msbuild RA2Client.sln `
             /p:Configuration=Release `
-            /p:Platform=x86 `
+            /p:Platform="x86" `
             /p:OutputPath="${{ github.workspace }}\RA2Client\bin\x86\Release\" `
             /v:m `
             /m
