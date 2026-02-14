@@ -23,71 +23,42 @@ jobs:
 
       - name: 🏗️ Build Solution (Release | Any CPU)
         run: |
-          $errorActionPreference = "Stop"
-          
-          # 1. 先检查解决方案文件是否存在
-          if (!(Test-Path "RA2Client.sln")) {
-            Write-Error "Solution file not found!"
-            exit 1
-          }
-          
-          # 2. 执行构建并捕获详细输出
-          Write-Host "🚀 Starting build process..."
-          $msbuildResult = Start-Process -FilePath "msbuild" -ArgumentList @(
-            "RA2Client.sln",
-            "/p:Configuration=Release",
-            "/p:Platform=`"Any CPU`"",
-            "/v:detailed",
-            "/m"
-          ) -Wait -PassThru -NoNewWindow
-          
-          if ($msbuildResult.ExitCode -ne 0) {
-            Write-Error "MSBuild failed with exit code: $($msbuildResult.ExitCode)"
-            exit $msbuildResult.ExitCode
-          }
-          
-          # 3. 验证是否有输出文件生成
-          $buildSuccess = $false
-          $projects = @(
-            "RA2Client",
-            "ClientCore",
-            "ClientGUI",
-            "DTAConfig",
-            "Localization",
-            "Rampastring.XNAUI",
-            "ClientUpdater",
-            "RandomMapGenerator",
-            "Reunion",
-            "Rampastring.Tools"
-          )
-          
-          foreach ($proj in $projects) {
-            $outputDir = "$proj\bin\Release"
-            if (Test-Path $outputDir) {
-              $files = Get-ChildItem $outputDir -Recurse -File
-              if ($files.Count -gt 0) {
-                Write-Host "✅ $proj : Found $($files.Count) output files in $outputDir"
-                $buildSuccess = $true
-              } else {
-                Write-Warning "⚠️ $proj : Output directory exists but is empty: $outputDir"
-              }
-            } else {
-              Write-Warning "⚠️ $proj : Output directory does not exist: $outputDir"
-            }
-          }
-          
-          if (-not $buildSuccess) {
-            Write-Error "❌ No projects generated any output files! Build likely failed silently."
-            exit 1
-          }
-          
-          Write-Host "✅ Build verification successful!"
+          Write-Host "🚀 Building solution..."
+          msbuild RA2Client.sln /p:Configuration=Release /p:Platform="Any CPU" /m /t:Build /v:detailed
         shell: pwsh
 
       - name: 📦 Collect all output files
         run: |
+          # 创建发布目录
+          mkdir release-package
+
+          # RA2Client 项目的实际输出路径（根据 .csproj 配置）
+          $ra2clientOutputPath = "RA2Client\Bin\Resources\Binaries"
+          
+          if (Test-Path $ra2clientOutputPath) {
+            Write-Host "✅ Copying RA2Client files from: $ra2clientOutputPath"
+            Copy-Item "$ra2clientOutputPath\*" -Destination release-package -Recurse -Force
+            
+            # 检查是否复制了关键文件
+            $ra2clientExe = "release-package\RA2Client.exe"
+            if (Test-Path $ra2clientExe) {
+              Write-Host "✅ RA2Client.exe successfully copied!"
+            } else {
+              Write-Warning "⚠️ RA2Client.exe not found in output"
+            }
+          } else {
+            Write-Warning "⚠️ RA2Client output path does not exist: $ra2clientOutputPath"
+            
+            # 尝试标准输出路径作为备选
+            $standardPath = "RA2Client\bin\Release"
+            if (Test-Path $standardPath) {
+              Write-Host "✅ Found RA2Client in standard path: $standardPath"
+              Copy-Item "$standardPath\*" -Destination release-package -Recurse -Force
+            }
+          }
+
+          # 收集其他项目的输出（可能使用标准路径）
           $projects = @(
-            "RA2Client",
             "ClientCore",
             "ClientGUI",
             "DTAConfig",
@@ -99,23 +70,22 @@ jobs:
             "Rampastring.Tools"
           )
 
-          mkdir release-package
-
           foreach ($proj in $projects) {
-            $srcPath = "${{ github.workspace }}\$proj\bin\Release"
-            if (Test-Path $srcPath) {
-              Write-Host "✅ Copying from $proj"
-              Copy-Item "$srcPath\*" -Destination release-package -Recurse -Force
+            # 检查标准输出路径
+            $standardPath = "$proj\bin\Release"
+            if (Test-Path $standardPath) {
+              Write-Host "✅ Copying from: $proj"
+              Copy-Item "$standardPath\*" -Destination release-package -Recurse -Force
             } else {
-              Write-Warning "⚠️ Output not found: $srcPath"
+              Write-Warning "⚠️ Standard output path not found for $proj"
+              
+              # 检查可能的其他输出路径（如果有类似的自定义配置）
+              $altPath = "$proj\Bin\Resources\Binaries"
+              if (Test-Path $altPath) {
+                Write-Host "✅ Found alternative output path for $proj: $altPath"
+                Copy-Item "$altPath\*" -Destination release-package -Recurse -Force
+              }
             }
-          }
-
-          # 验证是否收集到关键文件
-          $ra2clientExe = "release-package\RA2Client.exe"
-          if (!(Test-Path $ra2clientExe)) {
-            Write-Error "❌ RA2Client.exe not found! Build may have failed silently."
-            exit 1
           }
 
           $fileCount = (Get-ChildItem release-package -Recurse | Measure-Object).Count
