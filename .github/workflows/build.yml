@@ -38,8 +38,17 @@ jobs:
 
       - name: Collect output files
         run: |
+          $outputDir = "${{ github.workspace }}\RA2Client\bin\x86\Release"
+          if (!(Test-Path $outputDir)) {
+            Write-Error "Output directory not found: $outputDir"
+            exit 1
+          }
           mkdir release-package
-          xcopy "${{ github.workspace }}\RA2Client\bin\x86\Release\*" "release-package\" /E /I /Y
+          xcopy "$outputDir\*" "release-package\" /E /I /Y
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to copy files."
+            exit $LASTEXITCODE
+          }
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
