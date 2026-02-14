@@ -24,13 +24,15 @@ jobs:
       - name: 🏗️ Build Solution (Release | Any CPU)
         run: |
           $errorActionPreference = "Stop"
+          
           # 1. 先检查解决方案文件是否存在
           if (!(Test-Path "RA2Client.sln")) {
             Write-Error "Solution file not found!"
             exit 1
           }
-    
+          
           # 2. 执行构建并捕获详细输出
+          Write-Host "🚀 Starting build process..."
           $msbuildResult = Start-Process -FilePath "msbuild" -ArgumentList @(
             "RA2Client.sln",
             "/p:Configuration=Release",
@@ -38,12 +40,12 @@ jobs:
             "/v:detailed",
             "/m"
           ) -Wait -PassThru -NoNewWindow
-    
+          
           if ($msbuildResult.ExitCode -ne 0) {
             Write-Error "MSBuild failed with exit code: $($msbuildResult.ExitCode)"
             exit $msbuildResult.ExitCode
           }
-    
+          
           # 3. 验证是否有输出文件生成
           $buildSuccess = $false
           $projects = @(
@@ -58,26 +60,29 @@ jobs:
             "Reunion",
             "Rampastring.Tools"
           )
-    
+          
           foreach ($proj in $projects) {
             $outputDir = "$proj\bin\Release"
             if (Test-Path $outputDir) {
               $files = Get-ChildItem $outputDir -Recurse -File
               if ($files.Count -gt 0) {
-                Write-Host "✅ $proj: Found $($files.Count) output files in $outputDir"
+                Write-Host "✅ $proj : Found $($files.Count) output files in $outputDir"
                 $buildSuccess = $true
               } else {
-                Write-Warning "⚠️ $proj: Output directory exists but is empty: $outputDir"
+                Write-Warning "⚠️ $proj : Output directory exists but is empty: $outputDir"
               }
             } else {
-              Write-Warning "⚠️ $proj: Output directory does not exist: $outputDir"
+              Write-Warning "⚠️ $proj : Output directory does not exist: $outputDir"
             }
           }
-    
+          
           if (-not $buildSuccess) {
             Write-Error "❌ No projects generated any output files! Build likely failed silently."
             exit 1
           }
+          
+          Write-Host "✅ Build verification successful!"
+        shell: pwsh
 
       - name: 📦 Collect all output files
         run: |
@@ -99,7 +104,7 @@ jobs:
           foreach ($proj in $projects) {
             $srcPath = "${{ github.workspace }}\$proj\bin\Release"
             if (Test-Path $srcPath) {
-              Write-Host "✅ Copying from $srcPath"
+              Write-Host "✅ Copying from $proj"
               Copy-Item "$srcPath\*" -Destination release-package -Recurse -Force
             } else {
               Write-Warning "⚠️ Output not found: $srcPath"
@@ -115,7 +120,6 @@ jobs:
 
           $fileCount = (Get-ChildItem release-package -Recurse | Measure-Object).Count
           Write-Host "📦 Total files collected: $fileCount"
-
         shell: pwsh
 
       - name: 📤 Upload build artifact
