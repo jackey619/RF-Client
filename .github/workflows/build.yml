@@ -23,8 +23,18 @@ jobs:
 
       - name: Build RA2Client (Release | x86)
         run: |
-          msbuild RA2Client.sln /p:Configuration=Release /p:Platform=x86 /p:OutputPath=bin\x86\Release\
-          if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+          $errorActionPreference = "Stop"
+          msbuild RA2Client.sln `
+            /p:Configuration=Release `
+            /p:Platform=x86 `
+            /p:OutputPath="${{ github.workspace }}\output\" `
+            /v:m `
+            /m
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Build failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+        shell: pwsh
 
       - name: Collect output files
         run: |
