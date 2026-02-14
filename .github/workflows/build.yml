@@ -1,0 +1,39 @@
+name: Build RF-Client (Windows x86)
+
+on:
+  push:
+    branches: [ "**" ]  # 所有分支推送都触发
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:    # 允许手动触发
+
+jobs:
+  build:
+    runs-on: windows-latest  # 使用 Windows 虚拟机（支持 .NET Framework）
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore RA2Client.sln
+
+      - name: Build RA2Client (Release | x86)
+        run: |
+          msbuild RA2Client.sln /p:Configuration=Release /p:Platform=x86 /p:OutputPath=bin\x86\Release\
+          if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+
+      - name: Collect output files
+        run: |
+          mkdir release-package
+          xcopy "RA2Client\bin\x86\Release\*" "release-package\" /E /I /Y
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RF-Client-Windows-x86-${{ github.sha }}
+          path: release-package/
+          retention-days: 7
