@@ -2,14 +2,13 @@ name: Build RF-Client (Windows x86)
 
 on:
   push:
-    branches: [ "**" ]  # 所有分支推送都触发
+    branches: [ "**" ]
   pull_request:
     branches: [ "master" ]
-  workflow_dispatch:    # 允许手动触发
 
 jobs:
   build:
-    runs-on: windows-latest  # 使用 Windows 虚拟机（支持 .NET Framework）
+    runs-on: windows-latest
 
     steps:
       - name: Checkout code
@@ -21,20 +20,19 @@ jobs:
       - name: Restore NuGet packages
         run: nuget restore RA2Client.sln
 
-      - name: Build RA2Client (Release | x86)
+      - name: Build Solution (Release | x86)
         run: |
           $errorActionPreference = "Stop"
           msbuild RA2Client.sln `
             /p:Configuration=Release `
-            /p:Platform="Any CPU" `
-            /p:OutputPath="${{ github.workspace }}\output\" `
+            /p:Platform=x86 `
+            /p:OutputPath="${{ github.workspace }}\RA2Client\bin\x86\Release\" `
             /v:m `
             /m
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Build failed with exit code $LASTEXITCODE"
+            Write-Error "Build failed!"
             exit $LASTEXITCODE
           }
-        shell: pwsh
 
       - name: Collect output files
         run: |
@@ -44,15 +42,14 @@ jobs:
             exit 1
           }
           mkdir release-package
-          xcopy "$outputDir\*" "release-package\" /E /I /Y
+          xcopy "$outputDir\*" "release-from-package\" /E /I /Y
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to copy files."
             exit $LASTEXITCODE
           }
 
-      - name: Upload build artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: RF-Client-Windows-x86-${{ github.sha }}
           path: release-package/
-          retention-days: 7
